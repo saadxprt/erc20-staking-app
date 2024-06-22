@@ -53,7 +53,7 @@ export default function Home() {
   useEffect(() => {
     setInterval(() => {
       refetchData();
-    }, 10000);
+    }, 3000);
   }, []);
 
   const refetchData = () => {

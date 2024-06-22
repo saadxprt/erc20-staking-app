@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@openzeppelin/contracts-upgradeable": "^4.8.0",
-    "@thirdweb-dev/contracts": "^3.3.2"
+    "@thirdweb-dev/contracts": "^3.15.0",
+    "thirdweb": "^5.29.0"
   }
 }
