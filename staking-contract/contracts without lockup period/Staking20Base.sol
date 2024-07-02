@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: Apache-2.0
 pragma solidity ^0.8.0;
 
-/// @author thirdweb
-
 import "@thirdweb-dev/contracts/extension/ContractMetadata.sol";
 import "@thirdweb-dev/contracts/extension/Multicall.sol";
 import "@thirdweb-dev/contracts/extension/Ownable.sol";
@@ -17,7 +15,7 @@ import { CurrencyTransferLib } from "@thirdweb-dev/contracts/lib/CurrencyTransfe
  *
  *  EXTENSION: Staking20
  *
- *  The `Staking20Base` smart contract implements Token staking mechanism.
+ *  The Staking20Base smart contract implements Token staking mechanism.
  *  Allows users to stake their ERC-20 Tokens and earn rewards in form of another ERC-20 tokens.
  *
  *  Following features and implementation setup must be noted:
@@ -28,7 +26,7 @@ import { CurrencyTransferLib } from "@thirdweb-dev/contracts/lib/CurrencyTransfe
  *        which is ideally a different ERC20 token. See {_mintRewards}.
  *
  *      - To implement custom logic for staking, reward calculation, etc. corresponding functions can be
- *        overridden from the extension `Staking20`.
+ *        overridden from the extension Staking20.
  *
  *      - Ownership of the contract, with the ability to restrict certain functions to
  *        only be called by the contract's owner.
@@ -50,6 +48,18 @@ contract Staking20Base is ContractMetadata, Multicall, Ownable, Staking20 {
     /// @dev Total amount of reward tokens in the contract.
     uint256 private rewardTokenBalance;
 
+    /// @dev Maximum tokens that can be staked per user.
+    uint256 public maxTokensPerUser;
+
+    /// @dev Maximum total tokens that can be staked.
+    uint256 public maxTotalStakedTokens;
+
+    /// @dev Total tokens currently staked.
+    uint256 public totalStakedTokens;
+
+    /// @dev Mapping of user to staked tokens.
+    mapping(address => uint256) public userStakedTokens;
+
     constructor(
         uint80 _timeUnit,
         address _defaultAdmin,
@@ -57,7 +67,9 @@ contract Staking20Base is ContractMetadata, Multicall, Ownable, Staking20 {
         uint256 _rewardRatioDenominator,
         address _stakingToken,
         address _rewardToken,
-        address _nativeTokenWrapper
+        address _nativeTokenWrapper,
+        uint256 _maxTokensPerUser,
+        uint256 _maxTotalStakedTokens
     )
         Staking20(
             _nativeTokenWrapper,
@@ -70,6 +82,8 @@ contract Staking20Base is ContractMetadata, Multicall, Ownable, Staking20 {
         _setStakingCondition(_timeUnit, _rewardRatioNumerator, _rewardRatioDenominator);
 
         rewardToken = _rewardToken;
+        maxTokensPerUser = _maxTokensPerUser;
+        maxTotalStakedTokens = _maxTotalStakedTokens;
     }
 
     /// @dev Lets the contract receive ether to unwrap native tokens.
@@ -153,7 +167,7 @@ contract Staking20Base is ContractMetadata, Multicall, Ownable, Staking20 {
             nativeTokenWrapper
         );
 
-        // The withdrawal shouldn't reduce staking token balance. `>=` accounts for any accidental transfers.
+        // The withdrawal shouldn't reduce staking token balance. >= accounts for any accidental transfers.
         address _stakingToken = stakingToken == CurrencyTransferLib.NATIVE_TOKEN ? nativeTokenWrapper : stakingToken;
         require(
             IERC20(_stakingToken).balanceOf(address(this)) >= stakingTokenBalance,
@@ -174,5 +188,26 @@ contract Staking20Base is ContractMetadata, Multicall, Ownable, Staking20 {
     /// @dev Returns whether owner can be set in the given execution context.
     function _canSetOwner() internal view virtual override returns (bool) {
         return msg.sender == owner();
+    }
+
+    /// @dev Staking function with additional checks for max staked tokens per user and in total.
+    function _stake(uint256 _amount) internal override {
+        require(userStakedTokens[msg.sender] + _amount <= maxTokensPerUser, "Exceeds max tokens per user");
+        require(totalStakedTokens + _amount <= maxTotalStakedTokens, "Exceeds max total staked tokens");
+
+        userStakedTokens[msg.sender] += _amount;
+        totalStakedTokens += _amount;
+
+        super._stake(_amount);
+    }
+
+    /// @dev Withdraw function with additional checks for staked tokens.
+    function _withdraw(uint256 _amount) internal override {
+        require(userStakedTokens[msg.sender] >= _amount, "Insufficient staked tokens");
+
+        userStakedTokens[msg.sender] -= _amount;
+        totalStakedTokens -= _amount;
+
+        super._withdraw(_amount);
     }
 }
